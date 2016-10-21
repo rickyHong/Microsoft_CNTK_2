@@ -10,6 +10,7 @@
 #ifdef CNTK_PARALLEL_TRAINING_SUPPORT
 #include "QuantizedDistributedCommunicator.h"
 #include "QuantizedDataParallelDistributedTrainer.h"
+#include "BlockMomentumDistributedTrainer.h"
 #endif
 
 namespace CNTK
@@ -24,6 +25,39 @@ namespace CNTK
     {
         return MakeSharedObject<DataParallelDistributedTrainer>(communicator, useAsyncBufferedParameterUpdate);
     }
+
+    DistributedTrainerPtr CreateBlockMomentumDistributedTrainer(
+        DistributedCommunicatorPtr communicator,
+        size_t blockSize,
+        bool useNestrovMomentum,
+        bool resetSGDMomentumAfterAggregation,
+        double blockLearningRate)
+    {
+        return MakeSharedObject<BlockMomentumDistributedTrainer>(
+            communicator,
+            blockSize,
+            useNestrovMomentum,
+            resetSGDMomentumAfterAggregation,
+            blockLearningRate);
+    }
+
+    DistributedTrainerPtr CreateBlockMomentumDistributedTrainer(
+        DistributedCommunicatorPtr communicator,
+        size_t blockSize,
+        double blockMomentumAsTimeConstant,
+        bool useNestrovMomentum,
+        bool resetSGDMomentumAfterAggregation,
+        double blockLearningRate)
+    {
+        return MakeSharedObject<BlockMomentumDistributedTrainer>(
+            communicator,
+            blockSize,
+            useNestrovMomentum,
+            resetSGDMomentumAfterAggregation,
+            blockLearningRate,
+            blockMomentumAsTimeConstant);
+    }
+
 #else
     QuantizedDistributedCommunicatorPtr QuantizedMPICommunicator(bool, bool, size_t)
     {
@@ -33,6 +67,27 @@ namespace CNTK
     DistributedTrainerPtr CreateQuantizedDataParallelDistributedTrainer(DistributedCommunicatorPtr, bool)
     {
         LogicError("Quantized Distributed Trainer is not supported for this build.");
+    }
+
+    DistributedTrainerPtr CreateBlockMomentumDistributedTrainer(
+        DistributedCommunicatorPtr communicator,
+        size_t blockSize,
+        bool useNestrovMomentum,
+        bool resetSGDMomentumAfterAggregation,
+        double blockLearningRate)
+    {
+        LogicError("Block Momentum Distributed Trainer is not supported for this build.");
+    }
+
+    DistributedTrainerPtr CreateBlockMomentumDistributedTrainer(
+        DistributedCommunicatorPtr communicator,
+        size_t blockSize,
+        double blockMomentumAsTimeConstant,
+        bool useNestrovMomentum,
+        bool resetSGDMomentumAfterAggregation,
+        double blockLearningRate)
+    {
+        LogicError("Block Momentum Distributed Trainer is not supported for this build.");
     }
 #endif
 
@@ -50,7 +105,7 @@ namespace CNTK
     }
 
     // Optional override that gets called per minibatch after finishing gradient computation but before updating model parameters
-    void DataParallelDistributedTrainer::PreParameterUpdateCallback(const Trainer& /*trainer*/, std::vector<std::pair<Variable, NDArrayViewPtr>>& gradientValues, MinibatchInfo& info)
+    void DataParallelDistributedTrainer::PreParameterUpdateCallback(const Trainer& /*trainer*/, std::vector<std::pair<Parameter, NDArrayViewPtr>>& gradientValues, MinibatchInfo& info)
     {
         std::vector<NDArrayViewPtr> valuesToAggregate;
         for (const auto& i : gradientValues)

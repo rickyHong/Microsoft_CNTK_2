@@ -5,6 +5,8 @@
 
 #include "CNTKLibrary.h"
 #include "Common.h"
+#include <thread>
+#include <chrono>
 
 using namespace CNTK;
 using namespace std::placeholders;
@@ -82,11 +84,13 @@ int main(int /*argc*/, char* /*argv*/[])
     }
 #endif
 
+    std::this_thread::sleep_for(std::chrono::seconds(15));
+
     // Lets disable automatic unpacking of PackedValue object to detect any accidental unpacking 
     // which will have a silent performance degradation otherwise
     Internal::SetAutomaticUnpackingOfPackedValues(/*disable =*/ true);
 
-    {
+   {
         auto communicator = MPICommunicator();
         auto distributedTrainer = CreateDataParallelDistributedTrainer(communicator, false);
         TrainSimpleDistributedFeedForwardClassifer(DeviceDescriptor::CPUDevice(), distributedTrainer, communicator->CurrentWorker().m_globalRank);
@@ -98,6 +102,15 @@ int main(int /*argc*/, char* /*argv*/[])
     {
         auto communicator = QuantizedMPICommunicator(true, true, 32);
         auto distributedTrainer = CreateQuantizedDataParallelDistributedTrainer(communicator, false);
+        TrainSimpleDistributedFeedForwardClassifer(DeviceDescriptor::CPUDevice(), distributedTrainer, communicator->CurrentWorker().m_globalRank);
+
+        if (IsGPUAvailable())
+            TrainSimpleDistributedFeedForwardClassifer(DeviceDescriptor::GPUDevice(0), distributedTrainer, communicator->CurrentWorker().m_globalRank);
+    }
+
+    {
+        auto communicator = MPICommunicator();
+        auto distributedTrainer = CreateBlockMomentumDistributedTrainer(communicator, 1024);
         TrainSimpleDistributedFeedForwardClassifer(DeviceDescriptor::CPUDevice(), distributedTrainer, communicator->CurrentWorker().m_globalRank);
 
         if (IsGPUAvailable())
