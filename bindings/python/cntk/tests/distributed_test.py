@@ -1,4 +1,4 @@
-# Copyright (c) Microsoft. All rights reserved.
+﻿# Copyright (c) Microsoft. All rights reserved.
 
 # Licensed under the MIT license. See LICENSE.md file in the project root
 # for full license information.
@@ -32,18 +32,15 @@ def run_distributed_trainer(tmpdir, quantized):
 
     workers = communicator.workers()
     current_worker = communicator.current_worker()
-    found_rank = False
-    for wk in workers:
-        if current_worker.global_rank == wk.global_rank:
-            found_rank = True
+    found_rank = len([wk for wk in workers if current_worker.global_rank == wk.global_rank]) == 1
     
     assert found_rank
             
     dist_trainer = distributed.data_parallel_distributed_trainer(communicator, False)
 
-    trainer = Trainer(z, ce, errs, \
-            sgd(z.parameters, 0.007, m_schedule, 0.5, True),
-            distributed_trainer=dist_trainer)
+    trainer = Trainer(z, ce, errs,
+                      sgd(z.parameters, 0.007, m_schedule, 0.5, True),
+                      distributed_trainer=dist_trainer)
     in1_value = [[1],[2]]
     label_value = [[0], [1]]
     arguments = {in1: in1_value, labels: label_value}

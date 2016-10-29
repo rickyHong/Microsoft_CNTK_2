@@ -1,4 +1,4 @@
-# Copyright (c) Microsoft. All rights reserved.
+﻿# Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE.md file in the project root
 # for full license information.
 # ==============================================================================
@@ -30,11 +30,27 @@ class WorkerDescriptor(cntk_py.DistributedWorkerDescriptor):
         '''
         return super().m_host_id
 
-class Communicator(cntk_py.DistributedCommunicator):
+class Parallelization:
     '''
-    A communicator interface exposing communication primitives that serve as building blocks 
-    for distributed training.
+    Creates a parallization object that encapsulates distributed communicator and distributed trainer
     '''
+    def __init(self, communicator, distributed_trainer):
+        self.comm = communicator
+        self.dist_trainer = distributed_trainer
+    
+    @property
+    def communicator(self):
+        '''
+        The communicator
+        '''
+        return self.comm
+
+    @property
+    def distributed_trainer(self):
+        '''
+        The distributed trainer
+        '''
+        return self.dist_trainer
 
     @typemap
     def workers(self):
@@ -64,50 +80,25 @@ class Communicator(cntk_py.DistributedCommunicator):
         
     @staticmethod
     def finalize():
+        '''
+        calls MPI_Finalize. can't call any MPI functions afterwards
+        '''
         cntk_py.DistributedCommunicator.finalize();
-
-class QuantizedCommunicator(Communicator, cntk_py.QuantizedDistributedCommunicator):
+        
+def data_parallel(bits):
     '''
-    A communicator interface exposing communication primitives that serve as building blocks 
-    for distributed training.
-    '''
-
-@typemap
-def mpi_communicator():
-    '''
-    Creates a mpi communicator
-
-    Returns:
-        :class:`Communicator`: a distributed communicator
-    '''
-    return cntk_py.mpicommunicator()
-
-@typemap
-def quantized_mpi_communicator(num_quantization_bits):
-    '''
-    Creates a quantized mpi communicator
-
+    Creates a parallization object for data parallel SGD with optional quantization `bits`
+    
     Args:
-        num_quantization_bits (`int`): num_quantization_bits
-
+        bits (`int`): quantization bits, default is 32 for no quantization
+        
     Returns:
-        :class:`QuantizedCommunicator`: a quantized distributed communicator
+        (:class:`Parallelization`): a parallization instance to pass to trainer/reader
     '''
-    return cntk_py.quantized_mpicommunicator(True, True, num_quantization_bits)
-
-def data_parallel_distributed_trainer(communicator, use_async_buffered_parameter_update):
-    '''
-    Creates a data parallel distributed trainer using `communicator` with
-    option `use_async_buffered_parameter_update`.
-
-    Args:
-        communicator: a communicator or a quantized communicator
-        use_async_buffered_parameter_update (`bool`): use async buffered parameter update
-
-    Returns:
-        a distributed trainer instance
-    '''
-    if (isinstance(communicator, QuantizedCommunicator)):
-        return cntk_py.create_quantized_data_parallel_distributed_trainer(communicator, use_async_buffered_parameter_update)
+    if bits == 32:
+        comm = cntk_py.mpicommunicator()
+        dist_trainer = cntk_py.create_data_parallel_distributed_trainer(communicator, use_async_buffered_parameter_update)
     else:
-        return cntk_py.create_data_parallel_distributed_trainer(communicator, use_async_buffered_parameter_update)
+        comm = cntk_py.quantized_mpicommunicator(True, True, num_quantization_bits)
+        dist_trainer = cntk_py.create_quantized_data_parallel_distributed_trainer(communicator, use_async_buffered_parameter_update)
+        return  Parallelization(, )
