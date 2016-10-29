@@ -9,19 +9,10 @@
 # The training hyper parameters here are not necessarily optimal and for optimal convergence need to be tuned 
 # for specific parallelization degrees that you want to run the example with.
 
-import numpy as np
 import sys
 import os
-from cntk import Trainer, distributed, device, persist
-from cntk.cntk_py import DeviceKind_GPU
-from cntk.learner import momentum_sgd, learning_rate_schedule
-from cntk.ops import input_variable, constant, parameter, cross_entropy_with_softmax, combine, classification_error, times, element_times, pooling, AVG_POOLING, relu
-from cntk.io import ReaderConfig, ImageDeserializer
-from cntk.initializer import he_normal, glorot_uniform
 from examples.CifarResNet.CifarResNet import create_reader, create_resnet_model
-
-abs_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(abs_path, "..", ".."))
+from examples.parallel import launch
 from examples.common.nn import conv_bn_relu_layer, conv_bn_layer, linear_layer, print_training_progress
 
 TRAIN_MAP_FILENAME = 'train_map.txt'
@@ -29,22 +20,22 @@ MEAN_FILENAME = 'CIFAR-10_mean.xml'
 TEST_MAP_FILENAME = 'test_map.txt'
 
 # Trains a residual network model on the Cifar image dataset
-def cifar_resnet_distributed(data_path, run_test, num_epochs, communicator=None, save_model_filename=None, load_model_filename=None, debug_output=False):
-    image_height = 32
-    image_width = 32
-    num_channels = 3
-    num_classes = 10
-
+def cifar_resnet_distributed(data_path, run_test, num_epochs, communicator=None, save_model_filename=None, load_model_filename=None):
     feats_stream_name = 'features'
     labels_stream_name = 'labels'
 
-    minibatch_source = create_reader(os.path.join(data_path, 'train_map.txt'), os.path.join(data_path, 'CIFAR-10_mean.xml'), True,
-                                     distributed_communicator = communicator)
+    parallelTrain = (communicator != None)
+    
+    minibatch_source = create_reader(
+        os.path.join(data_path, TRAIN_MAP_FILENAME),
+        os.path.join(data_path, MEAN_FILENAME),
+        True,
+        distributed_communicator = communicator)
 
     features_si = minibatch_source[feats_stream_name]
     labels_si = minibatch_source[labels_stream_name]
 
-    # Instantiate the resnet classification model, or load from file
+    # Instantiate the resnet model function
     
     if load_model_filename:
         print("Loading model:", load_model_filename)
@@ -55,9 +46,9 @@ def cifar_resnet_distributed(data_path, run_test, num_epochs, communicator=None,
             (num_channels, image_height, image_width), features_si.m_element_type)
         classifier_output = create_resnet_model(image_input, num_classes)
 
-    # Input variables denoting the features and label data
-    label_var = input_variable((num_classes), features_si.m_element_type)
+    # Instantiate the model function
 
+    label_var = input_variable((num_classes), features_si.m_element_type)
     ce = cross_entropy_with_softmax(classifier_output, label_var)
     pe = classification_error(classifier_output, label_var)
 
@@ -81,11 +72,8 @@ def cifar_resnet_distributed(data_path, run_test, num_epochs, communicator=None,
                       distributed_trainer = dist_trainer)
     
     # Get minibatches of images to train with and perform model training
-    training_progress_output_freq = 100 if communicator else 20
+    training_progress_output_freq = 100 if parallelTrain else 20
 
-    if debug_output:
-        training_progress_output_freq = training_progress_output_freq/4
-        
     for i in range(0, num_mbs):
     
         # NOTE: depends on network, the mb_size can be changed dynamically here
