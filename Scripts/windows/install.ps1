@@ -105,7 +105,7 @@ Function main
             new-item -Path $localcache -ItemType Container | Out-Null
         }
 
-        $global:operationList  = @()
+        $Script:operationList  = @()
         if (VerifyOperations) {
 
             DownloadOperations
@@ -116,9 +116,7 @@ Function main
         }
     }
     catch {
-        $currentTime = Get-Date
-        Write-Host "Exception caught - function main / failure - End time [$currentTime]"
-        Write-Host ($Error[0]).Exception
+        Write-Host `nFatal error during script execution!`n($Error[0]).Exception`n
     }
 }
 
